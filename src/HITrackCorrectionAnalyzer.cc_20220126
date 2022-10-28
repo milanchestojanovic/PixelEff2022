@@ -1,0 +1,892 @@
+//
+// Original Author:  Eric Appelt
+//         Created:  Tue Nov 26, 2013
+//
+//
+
+#include <memory>
+#include <algorithm>
+
+#include "FWCore/Framework/interface/Frameworkfwd.h"
+#include "FWCore/Framework/interface/EDAnalyzer.h"
+
+#include "FWCore/Framework/interface/Event.h"
+#include "FWCore/Framework/interface/EventSetup.h"
+#include "FWCore/Framework/interface/ESHandle.h"
+
+#include "FWCore/Framework/interface/MakerMacros.h"
+#include "FWCore/ParameterSet/interface/ParameterSet.h"
+#include "FWCore/Utilities/interface/EDGetToken.h"
+
+#include <TH1.h>
+#include <TH2.h>
+#include <TH3.h>
+#include <TF1.h>
+#include <TTree.h>
+
+#include "FWCore/Framework/interface/MakerMacros.h"
+#include "FWCore/ServiceRegistry/interface/Service.h"
+#include "CommonTools/UtilAlgos/interface/TFileService.h"
+#include <DataFormats/VertexReco/interface/Vertex.h>
+#include <DataFormats/VertexReco/interface/VertexFwd.h>
+#include <DataFormats/TrackReco/interface/Track.h>
+#include <DataFormats/TrackReco/interface/TrackFwd.h>
+#include "SimDataFormats/TrackingAnalysis/interface/TrackingParticle.h"
+#include "SimDataFormats/TrackingAnalysis/interface/TrackingParticleFwd.h"
+#include "SimTracker/Records/interface/TrackAssociatorRecord.h"
+#include "DataFormats/RecoCandidate/interface/TrackAssociation.h"
+
+// Particle Flow
+#include "DataFormats/ParticleFlowCandidate/interface/PFCandidate.h"
+#include "DataFormats/ParticleFlowReco/interface/PFBlock.h"
+#include "DataFormats/ParticleFlowReco/interface/PFCluster.h"
+#include "DataFormats/ParticleFlowReco/interface/PFClusterFwd.h"
+// RecoJets
+#include "DataFormats/JetReco/interface/PFJet.h"
+#include "DataFormats/JetReco/interface/PFJetCollection.h"
+#include "DataFormats/JetReco/interface/CaloJet.h"
+#include "DataFormats/JetReco/interface/CaloJetCollection.h"
+
+#include "TrackingCode/HIRun2015Ana/interface/HITrackCorrectionTreeHelper.h"
+
+class HITrackCorrectionAnalyzer : public edm::EDAnalyzer {
+   public:
+      explicit HITrackCorrectionAnalyzer(const edm::ParameterSet&);
+      ~HITrackCorrectionAnalyzer();
+
+      static bool vtxSort( const reco::Vertex &  a, const reco::Vertex & b );
+
+   private:
+      virtual void beginJob() ;
+      virtual void analyze(const edm::Event&, const edm::EventSetup&);
+      virtual void endJob() ;
+      void initHistos(const edm::Service<TFileService> & fs);
+      bool passesTrackCuts(const reco::Track & track, const reco::Vertex & vertex);
+      bool passesTrackCutsPixel(const reco::Track & track, const reco::Vertex & vertex);
+      bool caloMatched(const reco::Track & track, const edm::Event& iEvent, unsigned it );
+
+      // ----------member data ---------------------------
+
+
+      std::map<std::string,TTree*> trkTree_;
+      std::map<std::string,TH2F*> trkCorr2D_;
+      std::map<std::string,TH3F*> trkCorr3D_;
+      TH3F * momRes_;
+      TH1F * vtxZ_;
+      TH1F * pthat_;
+      TF1 * vtxWeightFunc_;
+      TH3F * signal;
+      TH1F * hIndex;
+
+//eff checking
+      TH1F * eta_gen_;
+      TH1F * eta_rec_;
+      TH1F * eta_rec_noeff_;
+      TH2D *histo_pt_;
+      TH1D *histo_phi_;
+      TH3D *histo_res_;
+      TH2D *histo_mult_;
+      TH2D *histo_multgt_;
+      TH2D *histo_multpt_;
+      TH3D *histo_nhits_;
+      TH3D *histo_chi2n_;
+      TH3D *histo_nlayers_;
+      TH3D *histo_dz_;
+      TH3D *histo_dxy_;
+      TH3D *histo_hp_;
+      TH3D *histo_algo_;
+      TH2D *histo_chi2vsNhits_;
+      TH2D *histo_chi2vsPt_;
+      TH2D *histo_NhitsvsPt_;
+
+      TH1D *histo_dEta_;
+      TH1D *histo_dPhi_;
+      TH1D *histo_dPt_;
+      TH1D *histo_dChi2_;
+      TH1D *histo_ddz_;
+      TH1D *histo_ddxy_;
+
+      std::vector<TH2F*> eff2D;
+
+      TFile *table;
+
+      int centeffbins = 5; int centeffmax[5] = {5, 10, 30, 50, 100}; int centeffmin[5] = {0, 5,  10, 30, 50 }; 
+///////
+
+      HITrackCorrectionTreeHelper treeHelper_;
+
+      edm::EDGetTokenT<reco::VertexCollection> vertexSrc_;
+      edm::EDGetTokenT<edm::View<reco::Track> > trackSrc_;
+      edm::EDGetTokenT<edm::View<reco::Track> > trackSrc1_;
+      edm::EDGetTokenT<TrackingParticleCollection> tpFakSrc_;
+      edm::EDGetTokenT<TrackingParticleCollection> tpEffSrc_;
+      edm::EDGetTokenT<reco::RecoToSimCollection> associatorMapRTS_;
+      edm::EDGetTokenT<reco::SimToRecoCollection> associatorMapSTR_;
+
+      edm::InputTag pfCandSrc_;
+      edm::InputTag jetSrc_;
+
+      std::vector<double> ptBins_;
+      std::vector<double> etaBins_;
+      std::vector<double> occBins_;
+
+      bool doCaloMatched_;
+      double reso_;
+      double crossSection_;
+      
+      std::vector<double> vtxWeightParameters_;
+      std::vector<int> algoParameters_;
+      bool doVtxReweighting_;
+
+      bool applyVertexZCut_;
+      double vertexZMax_;
+
+      bool applyTrackCuts_;
+      std::string qualityString_;
+      double dxyErrMax_;
+      double dzErrMax_;
+      double ptErrMax_;
+      int    nhitsMin_;
+      double chi2nMax_;      
+      bool pCharge_;
+      bool nCharge_;
+      double dxyErrMaxPixel_;
+      double dzErrMaxPixel_;
+      double chi2nMaxPixel_;
+      double ptErrMaxPixel_;
+      double ptMerge_;
+
+      bool doMergeCount_;
+      bool doMomRes_;
+
+      bool fillNTuples_;
+
+      bool useCentrality_;
+      edm::EDGetTokenT<int> centralitySrc_;
+
+      int npthigh;
+};
+
+HITrackCorrectionAnalyzer::HITrackCorrectionAnalyzer(const edm::ParameterSet& iConfig):
+treeHelper_(),
+vertexSrc_(consumes<reco::VertexCollection>(iConfig.getParameter<edm::InputTag>("vertexSrc"))),
+trackSrc_(consumes<edm::View<reco::Track> >(iConfig.getParameter<edm::InputTag>("trackSrc"))),
+trackSrc1_(consumes<edm::View<reco::Track> >(iConfig.getParameter<edm::InputTag>("trackSrc1"))),
+tpFakSrc_(consumes<TrackingParticleCollection>(iConfig.getParameter<edm::InputTag>("tpFakSrc"))),
+tpEffSrc_(consumes<TrackingParticleCollection>(iConfig.getParameter<edm::InputTag>("tpEffSrc"))),
+associatorMapRTS_(consumes<reco::RecoToSimCollection>(iConfig.getParameter<edm::InputTag>("associatorMap"))),
+associatorMapSTR_(consumes<reco::SimToRecoCollection>(iConfig.getParameter<edm::InputTag>("associatorMap"))),
+ptBins_(iConfig.getParameter<std::vector<double> >("ptBins")),
+etaBins_(iConfig.getParameter<std::vector<double> >("etaBins")),
+occBins_(iConfig.getParameter<std::vector<double> >("occBins")),
+doCaloMatched_(iConfig.getParameter<bool>("doCaloMatched")),
+reso_(iConfig.getParameter<double>("reso")),
+crossSection_(iConfig.getParameter<double>("crossSection")),
+vtxWeightParameters_(iConfig.getParameter<std::vector<double> >("vtxWeightParameters")),
+algoParameters_(iConfig.getParameter<std::vector<int> >("algoParameters")),
+doVtxReweighting_(iConfig.getParameter<bool>("doVtxReweighting")),
+applyVertexZCut_(iConfig.getParameter<bool>("applyVertexZCut")),
+vertexZMax_(iConfig.getParameter<double>("vertexZMax")),
+applyTrackCuts_(iConfig.getParameter<bool>("applyTrackCuts")),
+qualityString_(iConfig.getParameter<std::string>("qualityString")),
+dxyErrMax_(iConfig.getParameter<double>("dxyErrMax")),
+dzErrMax_(iConfig.getParameter<double>("dzErrMax")),
+ptErrMax_(iConfig.getParameter<double>("ptErrMax")),
+nhitsMin_(iConfig.getParameter<int>("nhitsMin")),
+chi2nMax_(iConfig.getParameter<double>("chi2nMax")),
+pCharge_(iConfig.getParameter<bool>("pCharge")),
+nCharge_(iConfig.getParameter<bool>("nCharge")),
+dxyErrMaxPixel_(iConfig.getParameter<double>("dxyErrMaxPixel")),
+dzErrMaxPixel_(iConfig.getParameter<double>("dzErrMaxPixel")),
+chi2nMaxPixel_(iConfig.getParameter<double>("chi2nMaxPixel")),
+ptErrMaxPixel_(iConfig.getParameter<double>("ptErrMaxPixel")),
+ptMerge_(iConfig.getParameter<double>("ptMerge")),
+doMergeCount_(iConfig.getParameter<bool>("doMergeCount")),
+doMomRes_(iConfig.getParameter<bool>("doMomRes")),
+fillNTuples_(iConfig.getParameter<bool>("fillNTuples")),
+useCentrality_(iConfig.getParameter<bool>("useCentrality")),
+centralitySrc_(consumes<int>(iConfig.getParameter<edm::InputTag>("centralitySrc")))
+{
+
+   pfCandSrc_ = iConfig.getUntrackedParameter<edm::InputTag>("pfCandSrc");
+   jetSrc_ = iConfig.getParameter<edm::InputTag>("jetSrc");
+
+   edm::Service<TFileService> fs;
+   initHistos(fs);
+
+   vtxWeightFunc_ = new TF1("vtxWeight","gaus(0)/gaus(3)",-50.,50.);
+   // vtxWeightParameters should have size 6,
+   // one really should throw an error if not
+   if( (int)vtxWeightParameters_.size() == 6 )
+   {
+     for( unsigned int i=0;i<vtxWeightParameters_.size(); i++)
+       vtxWeightFunc_->SetParameter(i,vtxWeightParameters_[i]);
+   }
+
+   if( fillNTuples_ )
+   {
+     trkTree_["rec"] = fs->make<TTree>("recTree","recTree");
+     trkTree_["rec"]->Branch("recValues",&treeHelper_.b,treeHelper_.hiTrackLeafString.Data());
+     trkTree_["sim"] = fs->make<TTree>("simTree","simTree");
+     trkTree_["sim"]->Branch("simValues",&treeHelper_.b,treeHelper_.hiTrackLeafString.Data());
+   }
+  
+   npthigh=0;
+}
+
+HITrackCorrectionAnalyzer::~HITrackCorrectionAnalyzer()
+{
+   delete vtxWeightFunc_;
+}
+
+void
+HITrackCorrectionAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
+{
+
+  edm::Handle<reco::PFCandidateCollection> pfCandidates;
+  iEvent.getByLabel(pfCandSrc_, pfCandidates);
+  if( !pfCandidates.isValid() ) std::cout<< "false callo matching"<<std::endl ;   
+//  else std::cout<<"true callo matching"<<std::endl;
+
+   using namespace edm;
+
+   // obtain collections of simulated particles 
+   edm::Handle<TrackingParticleCollection>  TPCollectionHeff, TPCollectionHfake;
+   iEvent.getByToken(tpEffSrc_,TPCollectionHeff);
+   iEvent.getByToken(tpFakSrc_,TPCollectionHfake);
+
+   // obtain association map between tracks and simulated particles
+   reco::RecoToSimCollection recSimColl;
+   reco::SimToRecoCollection simRecColl;
+   edm::Handle<reco::SimToRecoCollection > simtorecoCollectionH;
+   edm::Handle<reco::RecoToSimCollection > recotosimCollectionH;
+   iEvent.getByToken(associatorMapSTR_,simtorecoCollectionH);
+   simRecColl= *(simtorecoCollectionH.product());
+   iEvent.getByToken(associatorMapRTS_,recotosimCollectionH);
+   recSimColl= *(recotosimCollectionH.product());
+
+  // beam spot
+  reco::BeamSpot beamSpot;
+  edm::Handle<reco::BeamSpot> beamSpotHandle;
+  iEvent.getByLabel("offlineBeamSpot", beamSpotHandle);
+
+   //calo jets
+/*
+   Handle<reco::CaloJetCollection> JetCollection;
+   iEvent.getByLabel(jetSrc_, JetCollection);
+   if( !JetCollection.isValid() ) return; 
+   double leadingJet = 0.;
+   for(unsigned irecojet = 0; irecojet < JetCollection->size(); irecojet++ ){
+      const reco::CaloJet & JetCand = (*JetCollection)[irecojet];
+      if( JetCand.pt() > leadingJet ) leadingJet = JetCand.pt();//finding leading pT jets
+   }
+
+   pthat_->Fill( leadingJet, crossSection_ );
+*/
+   // obtain reconstructed tracks
+   Handle<edm::View<reco::Track> > tcol, tcol1;
+   iEvent.getByToken(trackSrc_, tcol);
+
+     //Handle<edm::View<reco::Track> > tcol1;
+   iEvent.getByToken(trackSrc1_, tcol1);
+
+
+   // obtain primary vertices
+   Handle<reco::VertexCollection> vertex;
+   iEvent.getByToken(vertexSrc_, vertex);
+  
+   // sort the vertcies by number of tracks in descending order
+   reco::VertexCollection vsorted = *vertex;
+   std::sort( vsorted.begin(), vsorted.end(), HITrackCorrectionAnalyzer::vtxSort );
+
+   std::cout<<"ovde radi"<<std::endl;
+
+   // skip events with no PV, this should not happen
+   if( vsorted.size() == 0) return;
+
+   // skip events failing vertex cut
+   if( applyVertexZCut_)
+   {
+     if( fabs(vsorted[0].z()) > vertexZMax_ ) return;
+   }
+
+   // determine vertex reweighting factor
+   double w = 1.0;
+   w = w * crossSection_;
+   if ( doVtxReweighting_ )
+     w *= vtxWeightFunc_->Eval(vsorted[0].z());
+
+   vtxZ_->Fill(vsorted[0].z(),w);
+
+   // determine event multipliticy
+   int multiplicity =0;
+   for(edm::View<reco::Track>::size_type i=0; i<tcol->size(); ++i){
+     edm::RefToBase<reco::Track> track(tcol, i);
+     reco::Track* tr=const_cast<reco::Track*>(track.get());
+     if( passesTrackCuts(*tr, vsorted[0]) ) 
+       multiplicity++;
+   }
+
+   // determine centrality if set
+   // note if there is no centrality information multiplicity 
+   // will be used in place of the centrality
+   int cbin = multiplicity;
+   int occ = 1;
+   if( useCentrality_ )
+   {
+     edm::Handle<int> centralityBin;
+     iEvent.getByToken(centralitySrc_, centralityBin);
+     cbin = *centralityBin;
+     occ = cbin;
+   } 
+
+//eff checking
+   int ntrack = 0, ntrackgt = 0, ntrackpt = 0;
+   double dz=0.0, vzErr =0.0, dzsigma=0.0, dxy=0.0, vxErr=0.0, vyErr=0.0, dxysigma=0.0;
+
+//
+
+  ptMerge_ = 0.6;
+  if (occ < 20) ptMerge_ = 1.0;
+  double cutWidth_ = 0.2;
+  double trkRes_ = 0.02;
+
+   // ---------------------
+   // loop through reco tracks to fill fake, reco, and secondary histograms
+   // ---------------------
+
+   int i_milan=0;
+   int i_p=0, i_good=0, i_sim=0;
+   for(edm::View<reco::Track>::size_type i=0; i<tcol->size(); ++i){ 
+     edm::RefToBase<reco::Track> track(tcol, i);
+     reco::Track* tr=const_cast<reco::Track*>(track.get());
+
+     if ( tr->charge() == 0  ) continue;
+     i_milan++;
+//     std::cout<<"provera!! "<<i_milan<<std::endl;
+     math::XYZPoint vtxPoint(beamSpot.x0(),beamSpot.y0(), beamSpot.z0());
+
+     dz = tr->dz(vsorted[0].position());
+//     dz = tr->dz(vtxPoint);
+     vzErr = vsorted[0].zError();
+//     vzErr = beamSpot.sigmaZ();
+     dzsigma = sqrt(tr->dzError()*tr->dzError()+vzErr*vzErr);
+     dxy = tr->dxy( vsorted[0].position() );
+//     dxy = tr->dxy(vtxPoint);
+     vyErr = vsorted[0].yError();
+     vxErr = vsorted[0].xError();
+//     vyErr = beamSpot.BeamWidthY();
+//     vxErr = beamSpot.BeamWidthX();
+
+     dxysigma = sqrt(tr->dxyError()*tr->dxyError()+vxErr*vyErr);
+
+ //      if(tr->quality(reco::TrackBase::qualityByName(qualityString_)) != 1) std::cout<<"nije hp"<<std::endl;
+ //    else std::cout<<"jeste hp"<<std::endl;
+
+//     if (tr->pt() < 0.3) continue;
+//     if (tr->pt() > 3.0) continue;
+     if (fabs(tr->eta()) > 2.4 ) continue;
+//     if (tr->chi2() > 170 ) continue;
+//     if (fabs(dz/dzsigma) >  14 ) continue;
+ 
+//     histo_res_->Fill(tr->ptError()/tr->pt(),fabs(tr->eta() ), occ);
+//     histo_nhits_ -> Fill(tr->numberOfValidHits(), fabs(tr->eta() ), occ);
+//     histo_chi2n_ -> Fill(tr->normalizedChi2(), fabs(tr->eta() ), occ);
+//     histo_nlayers_ -> Fill(tr->hitPattern().trackerLayersWithMeasurement(), fabs(tr->eta() ), occ);
+//     histo_algo_ -> Fill(tr->originalAlgo(), fabs(tr->eta() ), occ);
+//     histo_dxy_ -> Fill(dxy/dxysigma, fabs(tr->eta() ), occ);
+//     histo_dz_ -> Fill(dz/dzsigma,fabs(tr->eta() ), occ);
+     if (tr->numberOfValidHits() ) eta_gen_->Fill(tr->eta());
+
+     if (tr->quality(reco::TrackBase::qualityByName(qualityString_)) != 1) histo_hp_->Fill(0.0, fabs(tr->eta() ), occ);
+     else histo_hp_->Fill(1.0, fabs(tr->eta() ), occ);
+
+     // skip tracks that fail cuts, using vertex with most tracks as PV       
+//     if (fabs(dxy/dxysigma) < 3 ) std::cout<<"prvi prolaz "<<"dpt = "<<tr->ptError()/tr->pt()<<"  dzErr = "<<dz/dzsigma<<"  dxyErr = "<< dxy/dxysigma<< " high purity = "<<tr->quality(reco::TrackBase::qualityByName(qualityString_))<<std::endl;
+     if( ! passesTrackCuts(*tr, vsorted[0]) ) continue;
+     //if( ! passesTrackCutsPixel(*tr, vsorted[0]) ) continue;
+     if( ! caloMatched(*tr, iEvent, i) ) continue;
+//     std::cout<<"charge "<<tr->charge()<<std::endl;
+     if (fabs(tr->eta()) > 2.4 ) continue;
+//     if (fabs(tr->ptError()/tr->pt())>0.1 ) continue;
+//     if (fabs(tr->phiError()/tr->phi())>0.1) continue;
+//     histo_res_->Fill(tr->ptError()/tr->pt(),fabs(tr->eta() ), occ);
+//     histo_nhits_ -> Fill(tr->numberOfValidHits(), fabs(tr->eta() ), occ);
+//     histo_chi2n_ -> Fill(tr->normalizedChi2()/tr->hitPattern().trackerLayersWithMeasurement(), fabs(tr->eta() ), occ);
+//     histo_nlayers_ -> Fill(tr->hitPattern().trackerLayersWithMeasurement(), fabs(tr->eta() ), occ);
+//     histo_algo_ -> Fill(tr->originalAlgo(), fabs(tr->eta() ), occ);
+//     histo_dxy_ -> Fill(dxy/dxysigma, fabs(tr->eta() ), occ);
+//     histo_dz_ -> Fill(dz/dzsigma,fabs(tr->eta() ), occ);
+//     histo_chi2vsNhits_ -> Fill(tr->normalizedChi2()/tr->hitPattern().trackerLayersWithMeasurement(), tr->numberOfValidHits());
+//     histo_chi2vsPt_ -> Fill(tr->normalizedChi2()/tr->hitPattern().trackerLayersWithMeasurement(), tr->pt());
+//     histo_NhitsvsPt_ -> Fill(tr->numberOfValidHits(), tr->pt());
+//     eta_rec_noeff_ -> Fill(tr->eta());
+//     histo_phi_ -> Fill(tr->phi());
+//     histo_pt_ -> Fill(tr->pt(),occ);
+
+
+     ntrack++;
+   
+//     if (dxy/dxysigma > 3.) continue;
+//     if (dz/dzsigma > 3.) continue;
+//     if (tr->normalizedChi2()/tr->hitPattern().trackerLayersWithMeasurement() > 12) continue;
+     ntrackpt++; 
+//    if (ntrackpt != ntrack) std::cout<<ntrack<<std::endl;
+
+     if(doMergeCount_ && (tr->pt() > (ptMerge_ - cutWidth_) )) {
+	int nrecG=0;
+	for(edm::View<reco::Track>::size_type ii=0; ii<tcol1->size(); ++ii){
+             edm::RefToBase<reco::Track> trackgt(tcol1, ii);
+             reco::Track* trgt=const_cast<reco::Track*>(trackgt.get());
+	     if ( ( passesTrackCuts(*trgt, vsorted[0]) ) &&   fabs(tr->eta()- trgt->eta()) < trkRes_ && fabs(tr->phi()- trgt->phi()) < trkRes_) 	
+		nrecG++;
+	}
+     if (nrecG>0) continue;
+     }
+     if (tr->numberOfValidHits() > 6 ) ntrackgt++;
+
+     trkCorr2D_["hrec"]->Fill(tr->eta(), tr->pt(), w);
+     trkCorr3D_["hrec3D"]->Fill(tr->eta(), tr->pt(), occ, w);
+
+// eff checking
+     double eff = 1.0;
+
+     for (int i_cf=0; i_cf<centeffbins;i_cf++) if(  occ>= centeffmin[i_cf]*2 && occ<centeffmax[i_cf]*2 )  {
+
+           eff = eff2D[i_cf]->GetBinContent(
+                eff2D[i_cf]->GetXaxis()->FindBin(tr->eta() ),
+                eff2D[i_cf]->GetYaxis()->FindBin(tr->pt() )
+           );
+     } 
+     eta_rec_->Fill(tr->eta(), 1.0/eff);
+/// end cecking
+
+     // look for match to simulated particle, use first match if it exists
+     std::vector<std::pair<TrackingParticleRef, double> > tp;
+     const TrackingParticle *mtp=0;
+     if(recSimColl.find(track) != recSimColl.end())      {
+     
+       size_t nrecM=0;
+//       std::cout<<"NrecM = "<<nrecM<<std::endl;
+       tp = recSimColl[track];
+       mtp = tp.begin()->first.get();  
+       if( fillNTuples_) treeHelper_.Set(*mtp, *tr, vsorted[0], tp.size(), cbin); 
+// merged collection duplicate
+       if (doMergeCount_) {
+	std::cout<<"check 1"<<std::endl;
+         std::vector<std::pair<edm::RefToBase<reco::Track>, double> > rtM;
+         if(simRecColl.find(tp.begin()->first) != simRecColl.end())
+         {
+            std::cout<<"check 1a"<<std::endl;
+            rtM = (std::vector<std::pair<edm::RefToBase<reco::Track>, double> >) simRecColl[tp.begin()->first];
+            std::vector<std::pair<edm::RefToBase<reco::Track>, double> >::const_iterator rtit;
+            for (rtit = rtM.begin(); rtit != rtM.end(); ++rtit)
+            {
+               const reco::Track* tmtr = rtit->first.get();
+      
+               std::cout<<"check 1b "<<tmtr->numberOfValidHits()<<std::endl;
+		
+               if( ! passesTrackCuts(*tmtr, vsorted[0]) ) continue;
+//               if( ! passesTrackCutsPixel(*tmtr, vsorted[0]) ) continue;
+        std::cout<<"check 2"<<std::endl;
+        
+               nrecM++;
+//               std::cout<<"NrecM = "<<nrecM<<"  pt = "<<tmtr->pt()<<" Nhits = "<<tmtr->numberOfValidHits()<<"  highPurity = "<<tmtr->quality(reco::TrackBase::qualityByName(qualityString_))<<std::endl;
+               trkCorr2D_["hmul"]->Fill(tr->eta(),tr->pt(), w);
+               trkCorr3D_["hmul3D"]->Fill(tr->eta(),tr->pt(), occ, w);
+               trkCorr2D_["hmul"]->Fill(tmtr->eta(),tmtr->pt(), w);
+               trkCorr3D_["hmul3D"]->Fill(tmtr->eta(),tmtr->pt(), occ, w);
+               histo_dEta_->Fill(tmtr->eta()-tr->eta());
+               histo_dPhi_->Fill(tmtr->phi()-tr->phi());
+ 	       std::cout<<" Duplacate tracks !!!!!!!!!  "<<std::endl;       
+		std::cout<<" pT = "<<tr->pt()<<"   "<<tmtr->pt()<<std::endl;
+                std::cout<<" eta = "<<tr->eta()<<"   "<<tmtr->eta()<<std::endl;
+                std::cout<<" phi = "<<tr->phi()<<"   "<<tmtr->phi()<<std::endl;
+           }
+       }
+
+//     std::cout<<"NrecM = "<<nrecM<<std::endl; 
+     }
+// merged collection duplicate ends
+/*       if (tr->pt() > 0.5 && tr->pt() < 0.6 ) {
+           i_p++;
+           std::cout<<i_p<<" "<<tr->pt()<<" "<<tr->eta()<<" "<<tr->phi()<<" GOOD!"<<std::endl;
+//           std::cout<<"   Sim "<<tp.pt()<<" "<<tp.eta()<<" "<<tp.phi()<<" GOOD!"<<std::endl;
+       } */
+       if( mtp->status() < 0 ) 
+       {
+         trkCorr2D_["hsec"]->Fill(tr->eta(), tr->pt(), w);     
+         trkCorr3D_["hsec3D"]->Fill(tr->eta(), tr->pt(), occ, w);     
+       }
+     }
+     else
+     {
+       if( fillNTuples_) treeHelper_.Set(*tr, vsorted[0], cbin); 
+       trkCorr2D_["hfak"]->Fill(tr->eta(), tr->pt(), w);
+       trkCorr3D_["hfak3D"]->Fill(tr->eta(), tr->pt(), occ, w);
+
+           i_p++;
+//           std::cout<<i_p<<" "<<tr->pt()<<" "<<tr->eta()<<" "<<tr->phi()<<" FAKE!"<<std::endl;
+       histo_res_->Fill(tr->ptError()/tr->pt(),fabs(tr->eta() ), occ);
+       histo_nhits_ -> Fill(tr->numberOfValidHits(), fabs(tr->eta() ), occ);
+       histo_chi2n_ -> Fill(tr->normalizedChi2()/tr->hitPattern().trackerLayersWithMeasurement(), fabs(tr->eta() ), occ);
+       histo_nlayers_ -> Fill(tr->hitPattern().trackerLayersWithMeasurement(), fabs(tr->eta() ), occ);
+       histo_algo_ -> Fill(tr->originalAlgo(), fabs(tr->eta() ), occ);
+       histo_dxy_ -> Fill(dxy/dxysigma, fabs(tr->eta() ), occ);
+       histo_dz_ -> Fill(dz/dzsigma,fabs(tr->eta() ), occ);
+       histo_chi2vsNhits_ -> Fill(tr->chi2(), tr->numberOfValidHits());
+       histo_chi2vsPt_ -> Fill(tr->normalizedChi2()/tr->hitPattern().trackerLayersWithMeasurement(), tr->pt());
+       histo_NhitsvsPt_ -> Fill(tr->numberOfValidHits(), tr->pt());
+       eta_rec_noeff_ -> Fill(tr->eta());
+       histo_phi_ -> Fill(tr->phi());
+       histo_pt_ -> Fill(tr->pt(),occ);
+
+     }
+     if( fillNTuples_) trkTree_["rec"]->Fill(); 
+   }
+
+
+   std::cout<<"multiplicity = "<<ntrack<<std::endl;
+   histo_mult_->Fill(ntrack,occ);
+   histo_multgt_->Fill(ntrackgt,occ);
+   histo_multpt_->Fill(ntrackpt,occ);
+
+
+   // ---------------------
+   // loop through sim particles to fill matched, multiple,  and sim histograms 
+   // ---------------------
+   for(TrackingParticleCollection::size_type i=0; i<TPCollectionHeff->size(); i++) 
+   {      
+     TrackingParticleRef tpr(TPCollectionHeff, i);
+     TrackingParticle* tp=const_cast<TrackingParticle*>(tpr.get());
+      
+     if(tp->status() < 0 || tp->charge()==0) continue; //only charged primaries
+
+     if ((pCharge_) && (tp->charge() < 0) ) continue;
+     if ((nCharge_) && (tp->charge() > 0) ) continue;
+
+
+     trkCorr2D_["hsim"]->Fill(tp->eta(),tp->pt(), w);
+     trkCorr3D_["hsim3D"]->Fill(tp->eta(),tp->pt(), occ, w);
+
+     if ( tp->pt()<0.4 && tp->pt() > 0.3 ) {
+           i_sim++;
+//           std::cout<<"   Sim "<<i_sim<<" "<<tp->pt()<<" "<<tp->eta()<<" "<<tp->phi()<<" "<<tp->numberOfHits()<<" GOOD!"<<std::endl;
+     }
+
+     // find number of matched reco tracks that pass cuts
+     std::vector<std::pair<edm::RefToBase<reco::Track>, double> > rt;
+     size_t nrec=0;
+     if(simRecColl.find(tpr) != simRecColl.end())
+     {
+       rt = (std::vector<std::pair<edm::RefToBase<reco::Track>, double> >) simRecColl[tpr];
+       std::vector<std::pair<edm::RefToBase<reco::Track>, double> >::const_iterator rtit;
+       for (rtit = rt.begin(); rtit != rt.end(); ++rtit)
+       {
+         const reco::Track* tmtr = rtit->first.get();
+   
+
+         if( ! passesTrackCuts(*tmtr, vsorted[0]) ) continue;
+         //if( ! passesTrackCutsPixel(*tmtr, vsorted[0]) ) continue;
+
+         unsigned index = -1;
+         if( tp->pt()>20 && doCaloMatched_ ){ 
+          for(edm::View<reco::Track>::size_type i=0; i<tcol1->size(); ++i){ 
+             edm::RefToBase<reco::Track> track(tcol1, i);
+             reco::Track* tr=const_cast<reco::Track*>(track.get());
+             index++;
+             if( tmtr->pt() == tr->pt() && tmtr->eta() == tr->eta() && tmtr->phi() == tr->phi() && tmtr->numberOfValidHits() == tr->numberOfValidHits() ) break;//simple match to find the corresponding index number (i-th track) in the track collection
+          }
+         if( ! caloMatched(*tmtr, iEvent, index) ) continue;
+         }  
+         nrec++;
+//         if (nrec>1) std::cout << "etaSim = "<<tp->eta()<<" etaRec = "<<tmtr->eta()<<" phiSim = "<<tp->phi()<< " phiRec = "<<tmtr->phi()<<std::endl;
+	 if (tp->pt() > 20 ) npthigh++;
+
+         if( doMomRes_ ) momRes_->Fill( tp->eta(), tp->pt(), tmtr->pt(), w);
+
+         dz = tmtr->dz(vsorted[0].position());
+         dzsigma = sqrt(tmtr->dzError()*tmtr->dzError()+vzErr*vzErr);
+         dxy = tmtr->dxy( vsorted[0].position() );
+         dxysigma = sqrt(tmtr->dxyError()*tmtr->dxyError()+vxErr*vyErr);
+
+//         if (nrec == 1) histo_res_->Fill(tmtr->ptError()/tmtr->pt(),fabs(tmtr->eta() ), occ);
+//         if (nrec == 1) histo_nhits_ -> Fill(tmtr->numberOfValidHits(), fabs(tmtr->eta() ), occ);
+//         if (nrec == 1) histo_chi2n_ -> Fill(tmtr->normalizedChi2()/tmtr->hitPattern().trackerLayersWithMeasurement(), fabs(tmtr->eta() ), occ);
+//         if (nrec == 1) histo_nlayers_ -> Fill(tmtr->hitPattern().trackerLayersWithMeasurement(), fabs(tmtr->eta() ), occ);
+//         if (nrec == 1) histo_algo_ -> Fill(tmtr->originalAlgo(), fabs(tmtr->eta() ), occ);
+//         if (nrec == 1) histo_dxy_ -> Fill(dxy/dxysigma, fabs(tmtr->eta() ), occ);
+//         if (nrec == 1) histo_dz_ -> Fill(dz/dzsigma,fabs(tmtr->eta() ), occ);
+//         if (nrec == 1) histo_chi2vsNhits_ -> Fill(tmtr->normalizedChi2()/tmtr->hitPattern().trackerLayersWithMeasurement(), tmtr->numberOfValidHits());
+//         if (nrec == 1) histo_chi2vsPt_ -> Fill(tmtr->normalizedChi2()/tmtr->hitPattern().trackerLayersWithMeasurement(), tmtr->pt());
+//         if (nrec == 1) histo_NhitsvsPt_ -> Fill(tmtr->numberOfValidHits(), tmtr->pt());
+//	 if (nrec == 1) eta_rec_noeff_ -> Fill(tmtr->eta());
+//	 if (nrec == 1) histo_phi_ -> Fill(tmtr->phi());
+//     	 if (nrec == 1) histo_pt_ -> Fill(tmtr->pt(),occ); 
+         histo_dEta_->Fill(tmtr->eta()-tp->eta());
+         histo_dPhi_->Fill(tmtr->phi()-tp->phi());
+         histo_dPt_->Fill(tmtr->pt()-tp->pt());
+         if (nrec == 1) {       
+		if ( tmtr->pt()<0.4 && tmtr->pt()>0.35 ) {
+           		i_good++;
+//           		std::cout<<i_good<<" "<<tmtr->pt()<<" "<<tmtr->eta()<<" "<<tmtr->phi()<<" "<<tmtr->numberOfValidHits()<<" GOOD!"<<std::endl;
+//	          	std::cout<<"   Sim "<<tp->pt()<<" "<<tp->eta()<<" "<<tp->phi()<<" "<<tp->numberOfHits()<<" GOOD!"<<std::endl;
+                                } 
+         }  
+       }
+     }
+     if( nrec>0 && fillNTuples_ ) treeHelper_.Set(*tp, *(rt.begin()->first.get()), vsorted[0], rt.size(), cbin);
+     if( nrec==0 && fillNTuples_ ) treeHelper_.Set(*tp, cbin);
+     if(nrec>0) trkCorr2D_["heff"]->Fill(tp->eta(),tp->pt(), w);
+     if(nrec>0) trkCorr3D_["heff3D"]->Fill(tp->eta(),tp->pt(), occ, w);
+     if(nrec>1) trkCorr2D_["hmul"]->Fill(tp->eta(),tp->pt(), w);
+     if(nrec>1 && (!doMergeCount_) ) trkCorr3D_["hmul3D"]->Fill(tp->eta(),tp->pt(), occ, w);
+     if( fillNTuples_) trkTree_["sim"]->Fill(); 
+
+   }
+
+}
+
+bool
+HITrackCorrectionAnalyzer::passesTrackCuts(const reco::Track & track, const reco::Vertex & vertex)
+{
+   if ( ! applyTrackCuts_ ) return true;
+
+   math::XYZPoint vtxPoint(0.0,0.0,0.0);
+   double vzErr =0.0, vxErr=0.0, vyErr=0.0;
+   vtxPoint=vertex.position();
+   vzErr=vertex.zError();
+   vxErr=vertex.xError();
+   vyErr=vertex.yError();
+
+   double dxy=0.0, dz=0.0, dxysigma=0.0, dzsigma=0.0;
+   dxy = track.dxy(vtxPoint);
+   dz = track.dz(vtxPoint);
+   dxysigma = sqrt(track.d0Error()*track.d0Error()+vxErr*vyErr);
+   dzsigma = sqrt(track.dzError()*track.dzError()+vzErr*vzErr);
+   
+   double chi2n = track.normalizedChi2();
+   double nlayers = track.hitPattern().trackerLayersWithMeasurement();
+   chi2n = chi2n/nlayers;
+   int nhits = track.numberOfValidHits();
+   int algo  = track.originalAlgo();  
+   int charge = track.charge();
+
+
+   if ((pCharge_) && (charge < 0) ) return false;
+   if ((nCharge_) && (charge > 0) ) return false;
+   if( track.pt() <= ptMerge_ ) return false;
+   if(track.quality(reco::TrackBase::qualityByName(qualityString_)) != 1)
+       return false;
+   if(fabs(track.ptError()) / track.pt() > ptErrMax_) return false;
+
+   if(fabs(dxy/dxysigma) > dxyErrMax_) return false;
+   if(fabs(dz/dzsigma) > dzErrMax_) return false;
+
+   if(nhits < nhitsMin_ ) return false;
+   int count = 0;
+   for(unsigned i = 0; i < algoParameters_.size(); i++){
+      if( algo == algoParameters_[i] ) count++;
+   }
+//   if( count == 0 ) return false;
+   if(chi2n > chi2nMax_ ) return false;  
+   if(track.pt() <= ptMerge_ ) return false;
+
+   return true;
+}
+
+bool
+HITrackCorrectionAnalyzer::passesTrackCutsPixel(const reco::Track & track, const reco::Vertex & vertex)
+{
+   if ( ! applyTrackCuts_ ) return true;
+   
+   math::XYZPoint vtxPoint(0.0,0.0,0.0);
+   double vzErr =0.0, vxErr=0.0, vyErr=0.0;
+   vtxPoint=vertex.position();
+   vzErr=vertex.zError();
+   vxErr=vertex.xError();
+   vyErr=vertex.yError();
+
+   double dxy=0.0, dz=0.0, dxysigma=0.0, dzsigma=0.0;
+   dxy = track.dxy(vtxPoint);
+   dz = track.dz(vtxPoint);
+   dxysigma = sqrt(track.d0Error()*track.d0Error()+vxErr*vyErr);
+   dzsigma = sqrt(track.dzError()*track.dzError()+vzErr*vzErr);
+
+   double chi2n = track.chi2();
+   double nlayers = track.hitPattern().trackerLayersWithMeasurement();
+   chi2n = chi2n/nlayers;
+   int nhits = track.numberOfValidHits();
+   int algo  = track.originalAlgo();
+   int charge = track.charge();
+
+   if ((pCharge_) && (charge < 0) ) return false;
+   if ((nCharge_) && (charge > 0) ) return false;
+   if(fabs(dxy/dxysigma) > dxyErrMaxPixel_) return false;
+   if( fabs(dz/dzsigma) > dzErrMaxPixel_) return false;
+   if(chi2n > chi2nMaxPixel_ ) return false;
+   if(fabs(track.ptError()) / track.pt() > ptErrMaxPixel_) return false;
+   if(track.pt() > ptMerge_ ) return false;
+   return true;
+
+}
+
+bool 
+HITrackCorrectionAnalyzer::caloMatched( const reco::Track & track, const edm::Event& iEvent, unsigned it )
+{
+  if( ! doCaloMatched_ ) return true;
+
+  // obtain pf candidates
+  edm::Handle<reco::PFCandidateCollection> pfCandidates;
+  iEvent.getByLabel(pfCandSrc_, pfCandidates);
+  if( !pfCandidates.isValid() ) return false;
+
+  double ecalEnergy = 0.;
+  double hcalEnergy = 0.;
+
+  for( unsigned ic = 0; ic < pfCandidates->size(); ic++ ) {//calo matching loops
+
+      const reco::PFCandidate& cand = (*pfCandidates)[ic];
+
+      int type = cand.particleId();
+
+      // only charged hadrons and leptons can be asscociated with a track
+      if(!(type == reco::PFCandidate::h ||     //type1
+      type == reco::PFCandidate::e ||     //type2
+      type == reco::PFCandidate::mu      //type3
+      )) continue;
+
+      reco::TrackRef trackRef = cand.trackRef();
+      if( it == trackRef.key() ) {
+        // cand_index = ic;
+        ecalEnergy = cand.ecalEnergy();
+        hcalEnergy = cand.hcalEnergy();              
+        break;
+      } 
+  }
+
+  //if((track.pt()-reso_*track.ptError())*TMath::CosH( track.eta() )>15 && (track.pt()-reso_*track.ptError())*TMath::CosH( track.eta() ) > hcalEnergy+ecalEnergy ) return false;
+  if( track.pt() < 20 || ( (hcalEnergy+ecalEnergy)/( track.pt()*TMath::CosH(track.eta() ) ) > reso_ && (hcalEnergy+ecalEnergy)/(TMath::CosH(track.eta())) > (track.pt() - 80.0) )  ) return true;
+  else {
+    return false;
+  }
+}
+
+
+void
+HITrackCorrectionAnalyzer::initHistos(const edm::Service<TFileService> & fs)
+{
+
+  signal = fs->make<TH3F>(Form("signal") , ";p_T;#Delta#phi;#Delta#eta" , 100, -50, 50,  31,  -0.5*TMath::Pi()+TMath::Pi()/32, 1.5*TMath::Pi()-TMath::Pi()/32, 33, -4.8 - 4.8/32.0, 4.8 + 4.8/32.0 );  
+  hIndex = fs->make<TH1F>("Index","index", 20,-1000,1000 );
+
+  std::vector<std::string> hNames2D = { "hsim", "hrec", "hmul", "hfak",
+                                        "heff", "hsec" };
+
+  for( auto name : hNames2D )
+  {
+     trkCorr2D_[name] = fs->make<TH2F>(name.c_str(),";#eta;p_{T}",
+                           etaBins_.size()-1, &etaBins_[0],
+			   ptBins_.size()-1, &ptBins_[0]); 
+  }
+
+  std::vector<std::string> hNames3D = { "hsim3D", "hrec3D", "hmul3D", "hfak3D",
+                                        "heff3D", "hsec3D" };
+
+  for( auto name : hNames3D )
+  {
+     trkCorr3D_[name] = fs->make<TH3F>(name.c_str(),";#eta;p_{T};occ",
+                           etaBins_.size()-1, &etaBins_[0],
+                           ptBins_.size()-1, &ptBins_[0],
+                           occBins_.size()-1, &occBins_[0]);
+  }
+
+
+  vtxZ_ = fs->make<TH1F>("vtxZ","Vertex z position",100,-30,30);
+  pthat_ = fs->make<TH1F>("pthat", "p_{T}(GeV)", 8000,0,800);
+
+// eff checking
+  double resBins[51], nhitsBins[51], chi2nBins[1001], dzBins[601], dxyBins[401], nlayersBins[101], hpBins[3], algoBins[101]; 
+  for (int i=0; i<51; i++) resBins[i]=double(i)/100.0;
+  for (int i=0; i<51; i++) nhitsBins[i]=double(i);
+  for (int i=0; i<1001; i++) chi2nBins[i]= double(i)/100;
+  for (int i=0; i<601; i++) dzBins[i]=-300 + double(i)/1.0;
+  for (int i=0; i<401; i++) dxyBins[i]=-200 + double(i)/1.0;
+  for (int i=0; i<101; i++) nlayersBins[i]= double(i);
+  for (int i=0; i<3; i++) hpBins[i]=double(i);
+  for (int i=0; i<101; i++) algoBins[i]=double(i);
+
+  eta_gen_ = fs->make<TH1F>("eta_gen","Eta of gen particles",etaBins_.size()-1, &etaBins_[0]);
+  eta_rec_ = fs->make<TH1F>("eta_rec","Eta of rec particles",etaBins_.size()-1, &etaBins_[0]);
+  eta_rec_noeff_ = fs->make<TH1F>("eta_rec_noeff","Eta of rec particles no eff",etaBins_.size()-1, &etaBins_[0]);
+  histo_pt_ = fs->make<TH2D>("pt" , "pt" , ptBins_.size()-1, &ptBins_[0], occBins_.size()-1, &occBins_[0] );
+  histo_phi_ = fs->make<TH1D>("phi" , "phi" , 31, -TMath::Pi(),TMath::Pi() );
+  histo_res_ = fs->make<TH3D>("res" , "res" , 50 , resBins, etaBins_.size()-1, &etaBins_[0], occBins_.size()-1, &occBins_[0] );
+  histo_nhits_ = fs->make<TH3D>("Nhits" , "Nhits" , 50 , nhitsBins, etaBins_.size()-1, &etaBins_[0], occBins_.size()-1, &occBins_[0] );
+  histo_chi2n_ = fs->make<TH3D>("chi2n" , "chi2n" , 1000 , chi2nBins, etaBins_.size()-1, &etaBins_[0], occBins_.size()-1, &occBins_[0] );
+  histo_dz_ = fs->make<TH3D>("dz" , "dz" , 600 , dzBins, etaBins_.size()-1, &etaBins_[0], occBins_.size()-1, &occBins_[0] );
+  histo_dxy_ = fs->make<TH3D>("dxy" , "dxy" , 400 , dxyBins, etaBins_.size()-1, &etaBins_[0], occBins_.size()-1, &occBins_[0] );
+  histo_nlayers_  = fs->make<TH3D>("nlayers" , "nlayers" , 100 ,nlayersBins, etaBins_.size()-1, &etaBins_[0], occBins_.size()-1, &occBins_[0] );
+  histo_hp_  = fs->make<TH3D>("highpurity" , "highpurity" , 2 ,hpBins, etaBins_.size()-1, &etaBins_[0], occBins_.size()-1, &occBins_[0] );
+  histo_algo_  = fs->make<TH3D>("algo" , "algo" , 100 ,algoBins, etaBins_.size()-1, &etaBins_[0], occBins_.size()-1, &occBins_[0] );
+  histo_mult_ = fs->make<TH2D>("mult_1" , "mult_1" , 200 , 0 , 10000, occBins_.size()-1, &occBins_[0] );
+  histo_multgt_ = fs->make<TH2D>("mult_pt" , "mult_pt" , 200 , 0 , 10000, occBins_.size()-1, &occBins_[0] );
+  histo_multpt_ = fs->make<TH2D>("mult_gt" , "mult_gt" , 200 , 0 , 10000, occBins_.size()-1, &occBins_[0] );
+  histo_chi2vsNhits_ = fs->make<TH2D>("chi2vsNhits" , "chi2vsNhits" , 100 , 0 , 1000, 30,0,30 );
+  histo_chi2vsPt_ = fs->make<TH2D>("chi2vsPt" , "chi2vsPt" , 100 , 0 , 1, ptBins_.size()-1, &ptBins_[0]);
+  histo_NhitsvsPt_ = fs->make<TH2D>("NhitsvsPt" , "NhitsvsPt" , 30,0,30, ptBins_.size()-1, &ptBins_[0] );
+
+  histo_dEta_ = fs->make<TH1D>("delta eta","delta eta",100, -0.5,0.5);
+  histo_dPhi_ = fs->make<TH1D>("delta phi","delta eta",100, -0.5,0.5);
+  histo_dPt_ = fs->make<TH1D>("delta pt","delta eta",100, -0.5,0.5);
+  histo_dChi2_ = fs->make<TH1D>("delta chi2","delta chi2",100, -0.5,0.5);
+  histo_ddz_ = fs->make<TH1D>("delta dz","delta chi2",100, -0.5,0.5);
+  histo_ddxy_ = fs->make<TH1D>("delta dxy","delta chi2",100, -0.5,0.5);
+
+
+  eff2D.resize(centeffbins);
+
+
+// /afs/cern.ch/work/m/mstojano/private/CENT_TEST/CMSSW_7_5_8_patch5/src/12010/HIN12010/crab/
+  //table = new TFile(Form("/home/mstojano/Run3Prep/tracking/CMSSW_10_3_1/src/TrackingCode/HIRun2015Ana/crab/EffCorrectionsPixel_TT_pt_0_10.root"));
+  table = new TFile(Form("EffCorrectionsPixel_TT_pt_0_10.root"));
+  for (int i=0; i<centeffbins;i++) eff2D[i] = (TH2F*)table->Get(Form("Eff_%d_%d",centeffmin[i],centeffmax[i]));
+//////////
+  std::vector<double> ptBinsFine;
+  for( unsigned int bin = 0; bin<ptBins_.size()-1; bin++)
+  {
+    double bStart = ptBins_[bin];
+    double bWid = ptBins_[bin+1] - ptBins_[bin];
+    for( int i=0;i<5;i++)
+      ptBinsFine.push_back( bStart + (double)i * bWid / 5. );
+  }
+  ptBinsFine.push_back(ptBins_[ptBins_.size()-1]);
+
+  momRes_ = fs->make<TH3F>("momRes","momentum resolution sim vs reco",
+                           etaBins_.size()-1, &etaBins_[0],
+                           ptBinsFine.size()-1, &ptBinsFine[0],
+                           ptBinsFine.size()-1, &ptBinsFine[0]);
+
+}
+
+bool
+HITrackCorrectionAnalyzer::vtxSort( const reco::Vertex &  a, const reco::Vertex & b )
+{
+  if( a.tracksSize() != b.tracksSize() )
+    return  a.tracksSize() > b.tracksSize() ? true : false ;
+  else
+    return  a.chi2() < b.chi2() ? true : false ;  
+}
+
+void
+HITrackCorrectionAnalyzer::beginJob()
+{
+}
+
+void
+HITrackCorrectionAnalyzer::endJob()
+{
+std::cout<<"number of particles with pt over 20 GeV is "<<npthigh<<std::endl;
+}
+
+DEFINE_FWK_MODULE(HITrackCorrectionAnalyzer);
